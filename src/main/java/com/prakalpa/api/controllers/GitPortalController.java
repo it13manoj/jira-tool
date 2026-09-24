@@ -121,7 +121,7 @@ public class GitPortalController {
             Client client = Client.builder().apiKey(geminiKey).build();
             String prompt = "You are an expert code reviewer. Review this PR patch and provide concise bug findings and actionable feedback:\n\n" + diffContent.toString();
 
-            GenerateContentResponse response = client.models.generateContent("gemini-2.5-flash", prompt, null);
+            GenerateContentResponse response = client.models.generateContent("gemini-3.6-flash", prompt, null);
             String aiReview = response.text();
 
             // C. Post Review Comment on Git PR

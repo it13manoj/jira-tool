@@ -136,7 +136,7 @@ public class GitConfigController {
             String prompt = "You are an automated senior code reviewer. Perform a thorough code review on this Git pull request diff. " +
                     "Structure your review clearly with a decision at the end starting with 'RECOMMENDATION: APPROVE' or 'RECOMMENDATION: REJECT'.\n\n" + diffContent;
 
-            String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + geminiApiKey;
+            String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" + geminiApiKey;
 
             Map<String, Object> responseBody = restClient.post()
                     .uri(geminiUrl)
