@@ -83,7 +83,7 @@ public class GitConfigController {
                 return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Missing required parameters: userId or prNumber"));
             }
 
-            Long userId = Long.parseLong(request.get("userId"));
+            Long userId = authUserService.getLoggedInUserId();
             int prNumber = Integer.parseInt(request.get("pullNumber"));
 
             Map<String, Object> result = processPullRequestReview(userId, prNumber);
