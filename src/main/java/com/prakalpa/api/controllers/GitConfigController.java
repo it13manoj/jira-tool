@@ -8,7 +8,6 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpStatusCodeException;
-import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestClient;
 
 import javax.crypto.Cipher;
@@ -18,14 +17,16 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/v1/users/git")
 public class GitConfigController {
 
-    private static final String SECRET_KEY = "Your32ByteLongSecretKeyHere!!!!!"; // Ensure 32 bytes for AES-256
+    private static final String SECRET_KEY = "Your32ByteLongSecretKeyHere!!!!!"; // 32 bytes for AES-256
     private static final String WEBHOOK_ENDPOINT_URL = "https://api.wdpcare.com/api/v1/users/git/webhook";
+    private static final Random RANDOM = new Random();
 
     @Autowired
     private UserGitConfigRepository configRepository;
@@ -79,21 +80,19 @@ public class GitConfigController {
     // 2. MANUAL OR ON-DEMAND PR REVIEW & MERGE
     // ==========================================
     @PostMapping("/review-and-merge")
-    public ResponseEntity<Map<String, Object>> reviewAndMergePullRequest(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> reviewAndMergePullRequest(@RequestBody Map<String, Object> request) {
         try {
-            // First check if user is authenticated via session/JWT token
             Long userId = authUserService.getLoggedInUserId();
 
-            // Fallback: If not found in session, parse dynamic userId from request body
             if (userId == null && request.containsKey("userId")) {
-                userId = parseUserIdSafely(request.get("userId"));
+                userId = parseUserIdSafely(String.valueOf(request.get("userId")));
             }
 
             if (userId == null || !request.containsKey("pullNumber")) {
-                return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Missing required parameters: authenticated userId or pullNumber"));
+                return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Missing required parameters: userId or pullNumber"));
             }
 
-            int prNumber = Integer.parseInt(request.get("pullNumber").toString());
+            int prNumber = Integer.parseInt(String.valueOf(request.get("pullNumber")));
 
             Map<String, Object> result = processPullRequestReview(userId, prNumber);
             return ResponseEntity.ok(result);
@@ -109,10 +108,9 @@ public class GitConfigController {
     @PostMapping("/webhook")
     public ResponseEntity<Map<String, Object>> handleGithubWebhook(@RequestBody Map<String, Object> payload) {
         try {
-            // Validate pull request event action
             String action = (String) payload.get("action");
             if (action == null || (!action.equals("opened") && !action.equals("reopened") && !action.equals("synchronize"))) {
-                return ResponseEntity.ok(Map.of("success", true, "message", "Ignored non-targeted webhook event action: " + action));
+                return ResponseEntity.ok(Map.of("success", true, "message", "Ignored event action: " + action));
             }
 
             Map<String, Object> repository = (Map<String, Object>) payload.get("repository");
@@ -122,21 +120,19 @@ public class GitConfigController {
                 return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Malformed webhook payload"));
             }
 
-            String fullRepoName = (String) repository.get("full_name"); // e.g., "owner/repo"
+            String fullRepoName = (String) repository.get("full_name");
             int prNumber = (Integer) pullRequest.get("number");
 
-            // Locate user config dynamically associated with this repository path in DB
             Optional<UserGitConfig> configOpt = configRepository.findByRepoPath(fullRepoName);
             if (configOpt.isEmpty()) {
-                return ResponseEntity.status(404).body(Map.of("success", false, "error", "No configured user found in DB for repository: " + fullRepoName));
+                return ResponseEntity.status(404).body(Map.of("success", false, "error", "No configured user found for repository: " + fullRepoName));
             }
 
             Long userId = configOpt.get().getUserId();
 
-            // Run code review asynchronously to respond immediately to GitHub's webhook timer
             CompletableFuture.runAsync(() -> processPullRequestReview(userId, prNumber));
 
-            return ResponseEntity.ok(Map.of("success", true, "message", "Webhook received. AI Review process initiated for PR #" + prNumber));
+            return ResponseEntity.ok(Map.of("success", true, "message", "Webhook received. AI Review initiated for PR #" + prNumber));
 
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("success", false, "error", "Webhook processing failed: " + e.getMessage()));
@@ -147,10 +143,9 @@ public class GitConfigController {
     // CORE PR REVIEW AND MERGE EXECUTION
     // ==========================================
     private Map<String, Object> processPullRequestReview(Long userId, int prNumber) {
-        // Fetch dynamic credentials from database
         Optional<UserGitConfig> configOpt = configRepository.findByUserId(userId);
         if (configOpt.isEmpty()) {
-            return Map.of("success", false, "error", "Configuration not found in database for user ID: " + userId);
+            return Map.of("success", false, "error", "Configuration not found for user ID: " + userId);
         }
 
         UserGitConfig config = configOpt.get();
@@ -160,7 +155,7 @@ public class GitConfigController {
 
         String[] parts = repoPath.split("/");
         if (parts.length < 2) {
-            return Map.of("success", false, "error", "Invalid repository path pattern stored in DB: " + repoPath);
+            return Map.of("success", false, "error", "Invalid repository path pattern in configuration");
         }
         String owner = parts[0];
         String repo = parts[1];
@@ -168,13 +163,18 @@ public class GitConfigController {
         RestClient restClient = RestClient.create();
         String authHeader = gitToken.startsWith("github_pat_") ? "Bearer " + gitToken : "token " + gitToken;
 
-        // Fetch PR Files/Diffs dynamically from GitHub
-        List<Map<String, Object>> files = restClient.get()
-                .uri("https://api.github.com/repos/{owner}/{repo}/pulls/{number}/files", owner, repo, prNumber)
-                .header("Authorization", authHeader)
-                .header("Accept", "application/vnd.github+json")
-                .retrieve()
-                .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+        // Fetch PR Files/Diffs
+        List<Map<String, Object>> files;
+        try {
+            files = restClient.get()
+                    .uri("https://api.github.com/repos/{owner}/{repo}/pulls/{number}/files", owner, repo, prNumber)
+                    .header("Authorization", authHeader)
+                    .header("Accept", "application/vnd.github+json")
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            return Map.of("success", false, "error", "Failed to fetch files from GitHub: " + e.getMessage());
+        }
 
         StringBuilder diffContent = new StringBuilder();
         if (files != null && !files.isEmpty()) {
@@ -189,16 +189,19 @@ public class GitConfigController {
             return Map.of("success", true, "message", "No visible diff patches found for this PR.");
         }
 
-        // Generate AI Review via Gemini API (with fallback strategy for high-demand 503 errors)
         String prompt = "You are an automated senior code reviewer. Perform a thorough code review on this Git pull request diff. " +
-                "Structure your response clearly and conclude with either 'RECOMMENDATION: APPROVE' or 'RECOMMENDATION: REJECT'.\n\n" + diffContent;
+                "Structure your response clearly with summary, findings, and conclude explicitly with either 'RECOMMENDATION: APPROVE' or 'RECOMMENDATION: REJECT'.\n\n" + diffContent;
 
         String aiReview = callGeminiWithRetryAndFallback(prompt, geminiApiKey);
 
-        // Comment AI Review back on GitHub PR
+        // Check if review failed due to permanent API error
+        if (aiReview.startsWith("ERROR:")) {
+            return Map.of("success", false, "error", aiReview);
+        }
+
+        // Post comment back to GitHub PR
         postGithubPrComment(owner, repo, prNumber, authHeader, aiReview);
 
-        // Conditionally Squash-Merge PR if Approved
         boolean merged = false;
         String mergeMessage;
 
@@ -218,10 +221,10 @@ public class GitConfigController {
     }
 
     // ==========================================
-    // RESILIENT GEMINI CALL (HANDLES 503 HIGH DEMAND)
+    // RESILIENT GEMINI ENGINE (BACKOFF + FALLBACK)
     // ==========================================
     private String callGeminiWithRetryAndFallback(String prompt, String apiKey) {
-        String[] models = {"gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"};
+        String[] models = {"gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"};
         RestClient restClient = RestClient.create();
 
         for (String model : models) {
@@ -229,41 +232,52 @@ public class GitConfigController {
 
             for (int attempt = 1; attempt <= 3; attempt++) {
                 try {
+                    Map<String, Object> requestBody = Map.of(
+                            "contents", List.of(
+                                    Map.of("parts", List.of(Map.of("text", prompt)))
+                            )
+                    );
+
                     Map<String, Object> geminiResponse = restClient.post()
                             .uri(url)
-                            .body(Map.of("contents", List.of(Map.of("parts", List.of(Map.of("text", prompt))))))
+                            .body(requestBody)
                             .retrieve()
                             .body(Map.class);
 
-                    return parseGeminiResponse(geminiResponse);
+                    String parsedResponse = parseGeminiResponse(geminiResponse);
+                    if (parsedResponse != null && !parsedResponse.isBlank()) {
+                        return parsedResponse;
+                    }
 
                 } catch (HttpStatusCodeException ex) {
-                    // Traps 503 Service Unavailable, 429 Too Many Requests, etc.
                     int statusCode = ex.getStatusCode().value();
-                    System.err.println("Gemini model " + model + " returned HTTP " + statusCode + " on attempt " + attempt);
+                    System.err.println("[" + model + "] Attempt " + attempt + " failed with HTTP " + statusCode);
 
-                    if ((statusCode == 503 || statusCode == 429 || statusCode == 500) && attempt < 3) {
-                        try {
-                            // Exponential delay: wait 2s, then 4s
-                            Thread.sleep(2000L * attempt);
-                        } catch (InterruptedException ignored) {}
-                        continue; // Retry same model
+                    if (statusCode == 503 || statusCode == 429 || statusCode == 500) {
+                        if (attempt < 3) {
+                            // Exponential Backoff with Jitter: ~1.5s, ~3s, ~6s
+                            long sleepTime = (long) (Math.pow(2, attempt) * 1000 + RANDOM.nextInt(500));
+                            try {
+                                Thread.sleep(sleepTime);
+                            } catch (InterruptedException ignored) {}
+                            continue;
+                        }
                     }
-                    // If max retries reached or non-retryable error, break loop to try next model in fallback array
+                    // For non-retryable status codes (e.g., 400, 403), break to next model
                     break;
 
                 } catch (Exception e) {
-                    System.err.println("Unexpected failure calling " + model + ": " + e.getMessage());
-                    break; // Switch to next fallback model
+                    System.err.println("[" + model + "] Unexpected error: " + e.getMessage());
+                    break;
                 }
             }
         }
 
-        return "ERROR: Gemini API servers are currently overloaded across all models. Please try again in 1 minute.";
+        return "ERROR: All Gemini models are currently experiencing high demand. Please try again in 1 minute.";
     }
 
     // ==========================================
-    // HELPER METHODS: GITHUB INTEGRATION
+    // HELPER METHODS
     // ==========================================
     private void postGithubPrComment(String owner, String repo, int prNumber, String authHeader, String commentBody) {
         try {
@@ -347,7 +361,6 @@ public class GitConfigController {
 
     private Long parseUserIdSafely(String rawUserId) {
         if (rawUserId == null || rawUserId.isBlank()) return null;
-        // Strip non-numeric characters e.g. "user_123" -> "123"
         String cleaned = rawUserId.replaceAll("[^0-9]", "");
         return cleaned.isEmpty() ? null : Long.parseLong(cleaned);
     }
@@ -355,23 +368,23 @@ public class GitConfigController {
     @SuppressWarnings("unchecked")
     private String parseGeminiResponse(Map<String, Object> geminiResponse) {
         if (geminiResponse == null || !geminiResponse.containsKey("candidates")) {
-            return "Unable to retrieve response from Gemini API.";
+            return null;
         }
 
         List<Map<String, Object>> candidates = (List<Map<String, Object>>) geminiResponse.get("candidates");
-        if (candidates == null || candidates.isEmpty()) return "No content candidates generated.";
+        if (candidates == null || candidates.isEmpty()) return null;
 
         Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
-        if (content == null) return "Empty content generated.";
+        if (content == null) return null;
 
         List<Map<String, Object>> partsList = (List<Map<String, Object>>) content.get("parts");
-        if (partsList == null || partsList.isEmpty()) return "Empty parts response.";
+        if (partsList == null || partsList.isEmpty()) return null;
 
         return (String) partsList.get(0).get("text");
     }
 
     // ==========================================
-    // HELPER METHODS: AES ENCRYPTION & DECRYPTION
+    // AES ENCRYPTION & DECRYPTION
     // ==========================================
     private String encrypt(String value) {
         if (value == null || value.isBlank()) return "";
@@ -399,7 +412,6 @@ public class GitConfigController {
 
             return new String(decryptedBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            // Fallback for unencrypted legacy plain-text database values
             return encryptedValue;
         }
     }
