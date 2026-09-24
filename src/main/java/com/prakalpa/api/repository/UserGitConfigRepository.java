@@ -9,5 +9,6 @@ public interface UserGitConfigRepository extends JpaRepository<UserGitConfig, Lo
 //    UserGitConfig findByUserId(Long id);
 
     Optional<UserGitConfig> findByUserId(Long id);
+    Optional<UserGitConfig> findByRepoPath(String repoPath);
 
 }
