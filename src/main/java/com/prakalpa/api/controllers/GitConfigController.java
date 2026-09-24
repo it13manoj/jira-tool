@@ -37,6 +37,22 @@ public class GitConfigController {
     // ==========================================
     // 1. SAVE OR UPDATE CONFIGURATION
     // ==========================================
+
+    @GetMapping("/config")
+    public ResponseEntity<?> saveConfig(){
+        try {
+            Long userId = authUserService.getLoggedInUserId();
+            if (userId == null) {
+                return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized user session"));
+            }
+            UserGitConfig config = configRepository.findByUserId(userId)
+                    .orElseGet(UserGitConfig::new);
+            return ResponseEntity.status(500).body(config);
+        }catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/save-config")
     public ResponseEntity<Map<String, Object>> saveConfig(@RequestBody Map<String, String> request) {
         try {
@@ -426,6 +442,113 @@ public class GitConfigController {
             return new String(decryptedBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
             return encryptedValue;
+        }
+    }
+
+
+
+    // ==========================================
+    // 4. REJECT AND CLOSE PULL REQUEST
+    // ==========================================
+    @PostMapping("/reject-pr")
+    public ResponseEntity<Map<String, Object>> rejectPullRequest(@RequestBody Map<String, Object> request) {
+        try {
+            // Parse payload values
+
+            Long userId = authUserService.getLoggedInUserId();
+
+            // Fallback: If userId is not supplied in body, fetch from active Auth session
+            if (userId == null) {
+                userId = authUserService.getLoggedInUserId();
+            }
+
+            if (!request.containsKey("pullNumber") || !request.containsKey("repoPath")) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "Missing required fields: pullNumber or repoPath"
+                ));
+            }
+
+            int prNumber = Integer.parseInt(String.valueOf(request.get("pullNumber")));
+            String repoPath = sanitizeRepoPath(String.valueOf(request.get("repoPath")));
+            String rejectReason = request.get("rejectReason") != null ? String.valueOf(request.get("rejectReason")) : "No reason provided.";
+
+            // Prefer gitToken provided in request body; fall back to encrypted DB token if omitted
+            String gitToken = request.get("gitToken") != null ? String.valueOf(request.get("gitToken")) : null;
+
+            if ((gitToken == null || gitToken.isBlank()) && userId != null) {
+                Optional<UserGitConfig> configOpt = configRepository.findByUserId(userId);
+                if (configOpt.isPresent()) {
+                    gitToken = decrypt(configOpt.get().getEncryptedGitToken());
+                }
+            }
+
+            if (gitToken == null || gitToken.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "GitHub access token is required to execute this operation."
+                ));
+            }
+
+            String[] parts = repoPath.split("/");
+            if (parts.length < 2) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "Invalid repository path pattern. Expected 'owner/repo'."
+                ));
+            }
+            String owner = parts[0];
+            String repo = parts[1];
+
+            String authHeader = gitToken.startsWith("github_pat_") ? "Bearer " + gitToken : "token " + gitToken;
+
+            // Step 1: Post rejection feedback comment on the PR
+            String commentMarkdown = "### ❌ Pull Request Rejected\n\n**Reason:** " + rejectReason;
+            postGithubPrComment(owner, repo, prNumber, authHeader, commentMarkdown);
+
+            // Step 2: Close the Pull Request via GitHub REST API
+            boolean closed = closeGithubPr(owner, repo, prNumber, authHeader);
+
+            if (closed) {
+                return ResponseEntity.ok(Map.of(
+                        "success", true,
+                        "message", "Pull Request #" + prNumber + " has been rejected and closed successfully.",
+                        "repoPath", repoPath,
+                        "pullNumber", prNumber,
+                        "rejectReason", rejectReason
+                ));
+            } else {
+                return ResponseEntity.status(500).body(Map.of(
+                        "success", false,
+                        "error", "Posted rejection comment, but failed to close Pull Request #" + prNumber + " on GitHub."
+                ));
+            }
+
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", "Failed to reject PR: " + e.getMessage()
+            ));
+        }
+    }
+
+    // ==========================================
+    // HELPER: CLOSE GITHUB PULL REQUEST
+    // ==========================================
+    private boolean closeGithubPr(String owner, String repo, int prNumber, String authHeader) {
+        try {
+            RestClient restClient = RestClient.create();
+            restClient.patch()
+                    .uri("https://api.github.com/repos/{owner}/{repo}/pulls/{number}", owner, repo, prNumber)
+                    .header("Authorization", authHeader)
+                    .header("Accept", "application/vnd.github+json")
+                    .body(Map.of("state", "closed"))
+                    .retrieve()
+                    .toBodilessEntity();
+            return true;
+        } catch (Exception e) {
+            System.err.println("Failed to close PR #" + prNumber + " on GitHub: " + e.getMessage());
+            return false;
         }
     }
 }
