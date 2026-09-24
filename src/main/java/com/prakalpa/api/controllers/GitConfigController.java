@@ -189,17 +189,29 @@ public class GitConfigController {
             return Map.of("success", true, "message", "No visible diff patches found for this PR.");
         }
 
+        // Safety Cap: Truncate oversized diffs (Max 30,000 characters) to prevent HTTP 429/503 limits
+        String truncatedDiff = diffContent.toString();
+        if (truncatedDiff.length() > 30000) {
+            truncatedDiff = truncatedDiff.substring(0, 30000) + "\n\n...[Diff truncated due to size limits]...";
+        }
+
         String prompt = "You are an automated senior code reviewer. Perform a thorough code review on this Git pull request diff. " +
-                "Structure your response clearly with summary, findings, and conclude explicitly with either 'RECOMMENDATION: APPROVE' or 'RECOMMENDATION: REJECT'.\n\n" + diffContent;
+                "Structure your response clearly with summary, findings, and conclude explicitly with either 'RECOMMENDATION: APPROVE' or 'RECOMMENDATION: REJECT'.\n\n" + truncatedDiff;
 
         String aiReview = callGeminiWithRetryAndFallback(prompt, geminiApiKey);
 
-        // Check if review failed due to permanent API error
+        // Soft Failure Handling: Inform user on GitHub PR instead of breaking pipeline
         if (aiReview.startsWith("ERROR:")) {
-            return Map.of("success", false, "error", aiReview);
+            postGithubPrComment(owner, repo, prNumber, authHeader,
+                    "⚠️ **AI Review Delayed**: Gemini models are currently experiencing heavy traffic. Please re-trigger review manually shortly.");
+
+            return Map.of(
+                    "success", false,
+                    "error", "Gemini API unavailable after multiple retries across all active models."
+            );
         }
 
-        // Post comment back to GitHub PR
+        // Post review comment back to GitHub PR
         postGithubPrComment(owner, repo, prNumber, authHeader, aiReview);
 
         boolean merged = false;
@@ -221,11 +233,13 @@ public class GitConfigController {
     }
 
     // ==========================================
-    // RESILIENT GEMINI ENGINE (BACKOFF + FALLBACK)
-    // ==========================================
+// RESILIENT GEMINI CALL (ACTIVE 2026 MODELS)
+// ==========================================
     private String callGeminiWithRetryAndFallback(String prompt, String apiKey) {
-        String[] models = {"gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"};
+        // Current Active Models List
+        String[] models = {"gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"};
         RestClient restClient = RestClient.create();
+        Random random = new Random();
 
         for (String model : models) {
             String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
@@ -251,23 +265,22 @@ public class GitConfigController {
 
                 } catch (HttpStatusCodeException ex) {
                     int statusCode = ex.getStatusCode().value();
-                    System.err.println("[" + model + "] Attempt " + attempt + " failed with HTTP " + statusCode);
+                    System.err.println("[" + model + "] Attempt " + attempt + " returned HTTP " + statusCode);
 
                     if (statusCode == 503 || statusCode == 429 || statusCode == 500) {
                         if (attempt < 3) {
-                            // Exponential Backoff with Jitter: ~1.5s, ~3s, ~6s
-                            long sleepTime = (long) (Math.pow(2, attempt) * 1000 + RANDOM.nextInt(500));
+                            // Exponential backoff with jitter: ~2s, ~4s, ~8s
+                            long sleepTime = (long) (Math.pow(2, attempt) * 1000 + random.nextInt(1000));
                             try {
                                 Thread.sleep(sleepTime);
                             } catch (InterruptedException ignored) {}
-                            continue;
+                            continue; // Retry current model
                         }
                     }
-                    // For non-retryable status codes (e.g., 400, 403), break to next model
-                    break;
+                    break; // Switch to next model in list on invalid status or exhausted retries
 
                 } catch (Exception e) {
-                    System.err.println("[" + model + "] Unexpected error: " + e.getMessage());
+                    System.err.println("[" + model + "] Unexpected exception: " + e.getMessage());
                     break;
                 }
             }
@@ -277,7 +290,7 @@ public class GitConfigController {
     }
 
     // ==========================================
-    // HELPER METHODS
+    // RESILIENT GEMINI ENGINE (BACKOFF + FALLBACK)
     // ==========================================
     private void postGithubPrComment(String owner, String repo, int prNumber, String authHeader, String commentBody) {
         try {
