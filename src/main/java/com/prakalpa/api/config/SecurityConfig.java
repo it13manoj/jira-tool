@@ -1,9 +1,8 @@
 package com.prakalpa.api.config;
 
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpMethod; // Added Import
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -54,6 +53,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
+        // Allowed origin domains
         configuration.setAllowedOrigins(List.of(
                 "https://jira-mocha.vercel.app",
                 "https://wdpcare.com",
@@ -79,20 +79,10 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
-                .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint((request, response, authException) -> {
-                            response.setHeader("Access-Control-Allow-Origin", "https://jira-mocha.vercel.app");
-                            response.setHeader("Access-Control-Allow-Credentials", "true");
-                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.getMessage());
-                        })
-                        .accessDeniedHandler((request, response, accessDeniedException) -> {
-                            response.setHeader("Access-Control-Allow-Origin", "https://jira-mocha.vercel.app");
-                            response.setHeader("Access-Control-Allow-Credentials", "true");
-                            response.sendError(HttpServletResponse.SC_FORBIDDEN, accessDeniedException.getMessage());
-                        })
-                )
                 .authorizeHttpRequests(auth -> auth
+                        // Permit preflight OPTIONS requests for ALL paths
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Permit public auth endpoints
                         .requestMatchers("/api/v1/auth/**", "/api/v1/public/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/v1/seo/**").hasAnyAuthority("ROLE_SEO","ROLE_SEOMANAGER","ROLE_SEOLEADS", "ROLE_ADMIN","ROLE_HR")
