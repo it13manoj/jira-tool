@@ -1,10 +1,10 @@
-# Stage 1: Build the JAR using Maven & OpenJDK 21
+# Stage 1: Build the JAR using Java 21 & Maven inside Docker
 FROM maven:3.9.6-eclipse-temurin-21 AS builder
 WORKDIR /app
 COPY . .
-RUN ./mvnw clean package -DskipTests || mvn clean package -DskipTests
+RUN mvn clean package -DskipTests
 
-# Stage 2: Run the application
+# Stage 2: Minimal Java 21 runtime container
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=builder /app/target/*.jar app.jar
