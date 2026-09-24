@@ -39,17 +39,38 @@ public class GitConfigController {
     // ==========================================
 
     @GetMapping("/config")
-    public ResponseEntity<?> saveConfig(){
+    public ResponseEntity<Map<String, Object>> getUserConfig() {
         try {
             Long userId = authUserService.getLoggedInUserId();
             if (userId == null) {
-                return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized user session"));
+                return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
             }
-            UserGitConfig config = configRepository.findByUserId(userId)
-                    .orElseGet(UserGitConfig::new);
-            return ResponseEntity.status(500).body(config);
-        }catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("success", false, "error", e.getMessage()));
+
+            Optional<UserGitConfig> configOpt = configRepository.findByUserId(userId);
+            if (configOpt.isEmpty()) {
+                return ResponseEntity.status(404).body(Map.of("success", false, "error", "Configuration not found"));
+            }
+
+            UserGitConfig entity = configOpt.get();
+
+            Map<String, Object> configMap = Map.of(
+                    "id", entity.getId(),
+                    "userId", entity.getUserId(),
+                    "repoPath", entity.getRepoPath() != null ? entity.getRepoPath() : "",
+                    "gitToken", decrypt(entity.getEncryptedGitToken()),
+                    "geminiApiKey", decrypt(entity.getEncryptedGeminiApiKey())
+            );
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "config", configMap
+            ));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", "Failed to retrieve git config: " + e.getMessage()
+            ));
         }
     }
 
