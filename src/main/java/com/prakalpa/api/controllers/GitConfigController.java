@@ -556,19 +556,39 @@ public class GitConfigController {
     // ==========================================
     // HELPER: CLOSE GITHUB PULL REQUEST
     // ==========================================
+    // ==========================================
+    // HELPER: CLOSE GITHUB PULL REQUEST (FIXED)
+    // ==========================================
     private boolean closeGithubPr(String owner, String repo, int prNumber, String authHeader) {
         try {
             RestClient restClient = RestClient.create();
-            restClient.patch()
+
+            // GitHub PATCH endpoint payload to close PR
+            Map<String, Object> patchBody = Map.of("state", "closed");
+
+            ResponseEntity<Map<String, Object>> response = restClient.patch()
                     .uri("https://api.github.com/repos/{owner}/{repo}/pulls/{number}", owner, repo, prNumber)
                     .header("Authorization", authHeader)
                     .header("Accept", "application/vnd.github+json")
-                    .body(Map.of("state", "closed"))
+                    .header("User-Agent", "Spring-Boot-Git-Integration")
+                    .header("X-GitHub-Api-Version", "2022-11-28")
+                    .body(patchBody)
                     .retrieve()
-                    .toBodilessEntity();
-            return true;
+                    .toEntity(new ParameterizedTypeReference<Map<String, Object>>() {});
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                System.out.println("Successfully closed PR #" + prNumber + " on GitHub.");
+                return true;
+            } else {
+                System.err.println("GitHub returned status " + response.getStatusCode() + " while closing PR #" + prNumber);
+                return false;
+            }
+
+        } catch (HttpStatusCodeException e) {
+            System.err.println("GitHub API error closing PR #" + prNumber + " [HTTP " + e.getStatusCode() + "]: " + e.getResponseBodyAsString());
+            return false;
         } catch (Exception e) {
-            System.err.println("Failed to close PR #" + prNumber + " on GitHub: " + e.getMessage());
+            System.err.println("Unexpected exception while closing PR #" + prNumber + ": " + e.getMessage());
             return false;
         }
     }
