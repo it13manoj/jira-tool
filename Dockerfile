@@ -1,12 +1,12 @@
-FROM maven:3.9-eclipse-temurin-17 AS builder
+# Stage 1: Build the JAR using Maven & OpenJDK 21
+FROM maven:3.9.6-eclipse-temurin-21 AS builder
 WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-RUN mvn clean package -DskipTests
+COPY . .
+RUN ./mvnw clean package -DskipTests || mvn clean package -DskipTests
 
-# Step 2: Runtime stage
-FROM openjdk:17-jdk-slim
+# Stage 2: Run the application
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=builder /app/target/*.jar app.jar
-EXPOSE 8080
-ENTRYPOINT ["java", "-Xms256m", "-Xmx1024m", "-jar", "app.jar"]
+EXPOSE 9091
+ENTRYPOINT ["java", "-jar", "app.jar"]
