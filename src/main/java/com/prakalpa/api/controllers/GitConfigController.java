@@ -76,23 +76,23 @@ public class GitConfigController {
     // ==========================================
     // 2. MANUAL OR ON-DEMAND PR REVIEW & MERGE
     // ==========================================
-    @PostMapping("/review-and-merge")
-    public ResponseEntity<Map<String, Object>> reviewAndMergePullRequest(@RequestBody Map<String, String> request) {
-        try {
-            if (!request.containsKey("userId") || !request.containsKey("prNumber")) {
-                return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Missing required parameters: userId or prNumber"));
-            }
-
-            Long userId = Long.parseLong(request.get("userId"));
-            int prNumber = Integer.parseInt(request.get("prNumber"));
-
-            Map<String, Object> result = processPullRequestReview(userId, prNumber);
-            return ResponseEntity.ok(result);
-
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("success", false, "error", "PR processing failed: " + e.getMessage()));
-        }
-    }
+//    @PostMapping("/review-and-merge")
+//    public ResponseEntity<Map<String, Object>> reviewAndMergePullRequest(@RequestBody Map<String, String> request) {
+//        try {
+//            if (!request.containsKey("userId") || !request.containsKey("prNumber")) {
+//                return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Missing required parameters: userId or prNumber"));
+//            }
+//
+//            Long userId = Long.parseLong(request.get("userId"));
+//            int prNumber = Integer.parseInt(request.get("prNumber"));
+//
+//            Map<String, Object> result = processPullRequestReview(userId, prNumber);
+//            return ResponseEntity.ok(result);
+//
+//        } catch (Exception e) {
+//            return ResponseEntity.status(500).body(Map.of("success", false, "error", "PR processing failed: " + e.getMessage()));
+//        }
+//    }
 
     // ==========================================
     // 3. GITHUB WEBHOOK RECEIVER

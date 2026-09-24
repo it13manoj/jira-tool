@@ -38,3 +38,12 @@ build/
 
 ### VS Code ###
 .vscode/
+# Ignore application config containing sensitive keys & DB credentials
+src/main/resources/application.properties
+src/main/resources/application-*.properties
+src/main/resources/application.yml
+src/main/resources/application-*.yml
+
+# Ignore Dockerfile
+Dockerfile
+docker-compose.yml
