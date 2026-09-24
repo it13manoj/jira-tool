@@ -4,7 +4,6 @@ import com.prakalpa.api.models.UserGitConfig;
 import com.prakalpa.api.repository.UserGitConfigRepository;
 import com.prakalpa.api.services.AuthUserService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,9 +28,8 @@ public class GitConfigController {
 
     private static final String CIPHER_ALGORITHM = "AES/CBC/PKCS5Padding";
     private static final int IV_SIZE = 16;
-
-    @Value("${app.security.secret-key:32ByteSecretKeyForAES256Encrypt!}")
-    private String secretKey;
+    // Hardcoded 32-byte key fallback to ensure Spring Boot starts up cleanly
+    private static final String SECRET_KEY = "PrakalpaAES256SecretKeyString32!";
 
     @Autowired
     private UserGitConfigRepository configRepository;
@@ -77,9 +75,6 @@ public class GitConfigController {
         }
     }
 
-    /**
-     * Endpoint for AI Code Review and Automatic PR Merge
-     */
     @PostMapping("/review-and-merge")
     public ResponseEntity<Map<String, Object>> reviewAndMergePullRequest(@RequestBody Map<String, String> request) {
         try {
@@ -90,7 +85,6 @@ public class GitConfigController {
             Long userId = Long.parseLong(request.get("userId"));
             int prNumber = Integer.parseInt(request.get("prNumber"));
 
-            // 1. Retrieve saved user credentials
             Optional<UserGitConfig> configOpt = configRepository.findByUserId(userId);
             if (configOpt.isEmpty()) {
                 return ResponseEntity.status(404).body(Map.of("success", false, "error", "Configuration not found for user"));
@@ -108,7 +102,6 @@ public class GitConfigController {
             String owner = parts[0];
             String repo = parts[1];
 
-            // 2. Fetch Diff using GitHub API
             RestClient restClient = RestClient.create();
             String authHeader = gitToken.startsWith("github_pat_") ? "Bearer " + gitToken : "token " + gitToken;
 
@@ -132,11 +125,10 @@ public class GitConfigController {
                 return ResponseEntity.ok(Map.of("success", true, "message", "No visible diffs found for this PR."));
             }
 
-            // 3. AI Code Review using Gemini
             String prompt = "You are an automated senior code reviewer. Perform a thorough code review on this Git pull request diff. " +
                     "Structure your review clearly with a decision at the end starting with 'RECOMMENDATION: APPROVE' or 'RECOMMENDATION: REJECT'.\n\n" + diffContent;
 
-            String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" + geminiApiKey;
+            String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + geminiApiKey;
 
             Map<String, Object> responseBody = restClient.post()
                     .uri(geminiUrl)
@@ -146,10 +138,8 @@ public class GitConfigController {
 
             String aiReview = parseGeminiResponse(responseBody);
 
-            // 4. Post AI Review Comment on GitHub PR
             postGithubPrComment(owner, repo, prNumber, authHeader, aiReview);
 
-            // 5. Merge PR on GitHub if Gemini recommends approval or passes checks
             boolean merged = false;
             String mergeMessage = "PR reviewed successfully.";
 
@@ -172,9 +162,6 @@ public class GitConfigController {
         }
     }
 
-    /**
-     * Helper to post a comment on a GitHub Pull Request
-     */
     private void postGithubPrComment(String owner, String repo, int prNumber, String authHeader, String commentBody) {
         try {
             RestClient restClient = RestClient.create();
@@ -190,9 +177,6 @@ public class GitConfigController {
         }
     }
 
-    /**
-     * Helper to trigger automated PR merge on GitHub
-     */
     private boolean mergeGithubPr(String owner, String repo, int prNumber, String authHeader) {
         try {
             RestClient restClient = RestClient.create();
@@ -283,7 +267,7 @@ public class GitConfigController {
             new SecureRandom().nextBytes(iv);
             IvParameterSpec ivSpec = new IvParameterSpec(iv);
 
-            SecretKeySpec keySpec = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), "AES");
+            SecretKeySpec keySpec = new SecretKeySpec(SECRET_KEY.getBytes(StandardCharsets.UTF_8), "AES");
             Cipher cipher = Cipher.getInstance(CIPHER_ALGORITHM);
             cipher.init(Cipher.ENCRYPT_MODE, keySpec, ivSpec);
 
@@ -310,7 +294,7 @@ public class GitConfigController {
             System.arraycopy(combined, 0, iv, 0, IV_SIZE);
             System.arraycopy(combined, IV_SIZE, cipherText, 0, cipherText.length);
 
-            SecretKeySpec keySpec = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), "AES");
+            SecretKeySpec keySpec = new SecretKeySpec(SECRET_KEY.getBytes(StandardCharsets.UTF_8), "AES");
             Cipher cipher = Cipher.getInstance(CIPHER_ALGORITHM);
             cipher.init(Cipher.DECRYPT_MODE, keySpec, new IvParameterSpec(iv));
 
