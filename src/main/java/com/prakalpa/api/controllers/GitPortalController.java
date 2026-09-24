@@ -97,51 +97,51 @@ public class GitPortalController {
     }
 
     // 3. Gemini Code Review & Merge Action
-    @PostMapping("/review-and-merge")
-    public ResponseEntity<Map<String, Object>> reviewAndMerge(@RequestBody Map<String, Object> request) {
-        String gitToken = (String) request.get("gitToken");
-        String geminiKey = (String) request.get("geminiKey");
-        String repoPath = (String) request.get("repoPath");
-        int pullNumber = (Integer) request.get("pullNumber");
-        String action = (String) request.get("action"); // "review" or "merge"
-
-        try {
-            // A. Fetch PR Diffs
-            GitHub github = new GitHubBuilder().withOAuthToken(gitToken).build();
-            GHRepository repository = github.getRepository(repoPath);
-            GHPullRequest pr = repository.getPullRequest(pullNumber);
-
-            StringBuilder diffContent = new StringBuilder();
-            for (GHPullRequestFileDetail file : pr.listFiles()) {
-                diffContent.append("File: ").append(file.getFilename()).append("\n");
-                diffContent.append("Patch:\n").append(file.getPatch()).append("\n\n");
-            }
-
-            // B. Analyze Diffs with Gemini
-            Client client = Client.builder().apiKey(geminiKey).build();
-            String prompt = "You are an expert code reviewer. Review this PR patch and provide concise bug findings and actionable feedback:\n\n" + diffContent.toString();
-
-            GenerateContentResponse response = client.models.generateContent("gemini-3.6-flash", prompt, null);
-            String aiReview = response.text();
-
-            // C. Post Review Comment on Git PR
-            pr.comment("### 🤖 Gemini AI Code Review Session\n\n" + aiReview);
-
-            // D. Merge PR if requested
-            boolean isMerged = false;
-            if ("merge".equalsIgnoreCase(action)) {
-                pr.merge("Merged via Portal after Gemini AI Review");
-                isMerged = true;
-            }
-
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "reviewFeedback", aiReview,
-                    "merged", isMerged
-            ));
-
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("success", false, "error", e.getMessage()));
-        }
-    }
+//    @PostMapping("/review-and-merge")
+//    public ResponseEntity<Map<String, Object>> reviewAndMerge(@RequestBody Map<String, Object> request) {
+//        String gitToken = (String) request.get("gitToken");
+//        String geminiKey = (String) request.get("geminiKey");
+//        String repoPath = (String) request.get("repoPath");
+//        int pullNumber = (Integer) request.get("pullNumber");
+//        String action = (String) request.get("action"); // "review" or "merge"
+//
+//        try {
+//            // A. Fetch PR Diffs
+//            GitHub github = new GitHubBuilder().withOAuthToken(gitToken).build();
+//            GHRepository repository = github.getRepository(repoPath);
+//            GHPullRequest pr = repository.getPullRequest(pullNumber);
+//
+//            StringBuilder diffContent = new StringBuilder();
+//            for (GHPullRequestFileDetail file : pr.listFiles()) {
+//                diffContent.append("File: ").append(file.getFilename()).append("\n");
+//                diffContent.append("Patch:\n").append(file.getPatch()).append("\n\n");
+//            }
+//
+//            // B. Analyze Diffs with Gemini
+//            Client client = Client.builder().apiKey(geminiKey).build();
+//            String prompt = "You are an expert code reviewer. Review this PR patch and provide concise bug findings and actionable feedback:\n\n" + diffContent.toString();
+//
+//            GenerateContentResponse response = client.models.generateContent("gemini-3.6-flash", prompt, null);
+//            String aiReview = response.text();
+//
+//            // C. Post Review Comment on Git PR
+//            pr.comment("### 🤖 Gemini AI Code Review Session\n\n" + aiReview);
+//
+//            // D. Merge PR if requested
+//            boolean isMerged = false;
+//            if ("merge".equalsIgnoreCase(action)) {
+//                pr.merge("Merged via Portal after Gemini AI Review");
+//                isMerged = true;
+//            }
+//
+//            return ResponseEntity.ok(Map.of(
+//                    "success", true,
+//                    "reviewFeedback", aiReview,
+//                    "merged", isMerged
+//            ));
+//
+//        } catch (Exception e) {
+//            return ResponseEntity.status(500).body(Map.of("success", false, "error", e.getMessage()));
+//        }
+//    }
 }
