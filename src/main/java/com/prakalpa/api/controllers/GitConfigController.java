@@ -107,7 +107,7 @@ public class GitConfigController {
                     "active", true,
                     "events", List.of("pull_request"),
                     "config", Map.of(
-                            "url", "https://your-domain.com/api/v1/users/git/webhook",
+                            "url", "https://api.wdpcare.com/api/v1/users/git/webhook",
                             "content_type", "json",
                             "insecure_ssl", "0"
                     )
