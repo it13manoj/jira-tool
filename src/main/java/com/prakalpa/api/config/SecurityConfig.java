@@ -2,9 +2,9 @@ package com.prakalpa.api.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod; // Added Import
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -61,15 +61,9 @@ public class SecurityConfig {
                 "http://localhost:9091"
         ));
 
-        // Allowed HTTP methods
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-
-        // Allowed headers
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"));
-
-        // Exposed headers
         configuration.setExposedHeaders(List.of("Authorization"));
-
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
@@ -81,13 +75,14 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Enable CORS with configuration source bean
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
                 .authorizeHttpRequests(auth -> auth
-                        // Permit public authentication & public endpoints
+                        // Permit preflight OPTIONS requests for ALL paths
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Permit public auth endpoints
                         .requestMatchers("/api/v1/auth/**", "/api/v1/public/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/v1/seo/**").hasAnyAuthority("ROLE_SEO","ROLE_SEOMANAGER","ROLE_SEOLEADS", "ROLE_ADMIN","ROLE_HR")
