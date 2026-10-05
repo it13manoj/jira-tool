@@ -164,4 +164,10 @@ public class GitPortalController {
         return ResponseEntity.ok(commitResult);
     }
 
+    @PostMapping("/repository/commit-push")
+    public ResponseEntity<Map<String, Object>> commitAndPush(@RequestBody FileRequest request) {
+        Map<String, Object> result = gitFileService.commitAndPushFile(request);
+        return ResponseEntity.ok(result);
+    }
+
 }
