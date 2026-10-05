@@ -2,8 +2,10 @@ package com.prakalpa.api.controllers;
 
 import com.prakalpa.api.models.CreateBranchRequest;
 import com.prakalpa.api.models.FetchRepositoriesRequest;
+import com.prakalpa.api.models.FetchTreeRequest;
 import com.prakalpa.api.services.GitBranchService;
 import com.prakalpa.api.services.GitRepositoryService;
+import com.prakalpa.api.services.GitTreeService;
 import org.kohsuke.github.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
@@ -23,10 +25,17 @@ public class GitPortalController {
     @Autowired
     private GitRepositoryService gitRepositoryService;
 
+    @Autowired
+    private GitTreeService gitTreeService;
+
     // Single constructor injecting both dependencies
-    public GitPortalController(GitBranchService gitBranchService, GitRepositoryService gitRepositoryService) {
+    public GitPortalController(
+            GitBranchService gitBranchService,
+            GitRepositoryService gitRepositoryService,
+            GitTreeService gitTreeService) {
         this.gitBranchService = gitBranchService;
         this.gitRepositoryService = gitRepositoryService;
+        this.gitTreeService = gitTreeService;
     }
 
     // 1. Connect & Verify Git Token
@@ -127,6 +136,13 @@ public class GitPortalController {
     public ResponseEntity<List<?>> getRepositories(@RequestBody FetchRepositoriesRequest request) {
         List<?> repositories = gitRepositoryService.fetchRepositories(request);
         return ResponseEntity.ok(repositories);
+    }
+
+
+    @PostMapping("/repository/tree")
+    public ResponseEntity<Map<String, Object>> getRepositoryTree(@RequestBody FetchTreeRequest request) {
+        Map<String, Object> treeData = gitTreeService.fetchRepositoryTree(request);
+        return ResponseEntity.ok(treeData);
     }
 
 }
