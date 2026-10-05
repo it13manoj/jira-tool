@@ -140,8 +140,8 @@ public class GitPortalController {
 
 
     @PostMapping("/repository/tree")
-    public ResponseEntity<Map<String, Object>> getRepositoryTree(@RequestBody FetchTreeRequest request) {
-        Map<String, Object> treeData = gitTreeService.fetchRepositoryTree(request);
+    public ResponseEntity<Object> getRepositoryTree(@RequestBody FetchTreeRequest request) {
+        Object treeData = gitTreeService.fetchRepositoryTree(request);
         return ResponseEntity.ok(treeData);
     }
 
