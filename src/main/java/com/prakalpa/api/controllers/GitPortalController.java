@@ -102,8 +102,15 @@ public class GitPortalController {
 
     @PostMapping("/create-branch")
     public ResponseEntity<Map<String, Object>> createBranch(@RequestBody CreateBranchRequest request) {
-        Map<String, Object> result = gitBranchService.createBranch(request);
-        return ResponseEntity.ok(result);
+        try {
+            // Branch creation service logic
+            Map<String, Object> result = gitBranchService.createBranch(request);
+            return ResponseEntity.ok(result);
+        } catch (org.springframework.web.client.HttpClientErrorException.Forbidden e) {
+            // Print exact error returned by GitHub API to stdout/logs
+            System.err.println("GitHub API Error Details: " + e.getResponseBodyAsString());
+            throw e;
+        }
     }
 
 }
