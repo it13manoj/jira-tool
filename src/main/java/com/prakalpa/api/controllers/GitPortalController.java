@@ -1,8 +1,11 @@
 package com.prakalpa.api.controllers;
 
 import com.prakalpa.api.models.CreateBranchRequest;
+import com.prakalpa.api.models.FetchRepositoriesRequest;
 import com.prakalpa.api.services.GitBranchService;
+import com.prakalpa.api.services.GitRepositoryService;
 import org.kohsuke.github.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,9 +17,16 @@ import java.util.*;
 @RequestMapping("/api/v1/users/git")
 @CrossOrigin(origins = "*")
 public class GitPortalController {
-    private final GitBranchService gitBranchService;
-    public GitPortalController(GitBranchService gitBranchService) {
+    @Autowired
+    private GitBranchService gitBranchService;
+
+    @Autowired
+    private GitRepositoryService gitRepositoryService;
+
+    // Single constructor injecting both dependencies
+    public GitPortalController(GitBranchService gitBranchService, GitRepositoryService gitRepositoryService) {
         this.gitBranchService = gitBranchService;
+        this.gitRepositoryService = gitRepositoryService;
     }
 
     // 1. Connect & Verify Git Token
@@ -111,6 +121,12 @@ public class GitPortalController {
             System.err.println("GitHub API Error Details: " + e.getResponseBodyAsString());
             throw e;
         }
+    }
+
+    @PostMapping("/repositories")
+    public ResponseEntity<List<?>> getRepositories(@RequestBody FetchRepositoriesRequest request) {
+        List<?> repositories = gitRepositoryService.fetchRepositories(request);
+        return ResponseEntity.ok(repositories);
     }
 
 }
