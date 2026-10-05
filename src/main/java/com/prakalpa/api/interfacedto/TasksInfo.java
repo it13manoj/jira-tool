@@ -7,7 +7,7 @@ import java.util.Optional;
 
 
 public interface TasksInfo {
-    void create(Tasks tasks);
+    Tasks create(Tasks tasks);
 
     List<Tasks> findAll();
 
