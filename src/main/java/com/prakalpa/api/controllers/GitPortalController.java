@@ -3,7 +3,9 @@ package com.prakalpa.api.controllers;
 import com.prakalpa.api.models.CreateBranchRequest;
 import com.prakalpa.api.models.FetchRepositoriesRequest;
 import com.prakalpa.api.models.FetchTreeRequest;
+import com.prakalpa.api.models.FileRequest;
 import com.prakalpa.api.services.GitBranchService;
+import com.prakalpa.api.services.GitFileService;
 import com.prakalpa.api.services.GitRepositoryService;
 import com.prakalpa.api.services.GitTreeService;
 import org.kohsuke.github.*;
@@ -28,14 +30,18 @@ public class GitPortalController {
     @Autowired
     private GitTreeService gitTreeService;
 
+    @Autowired
+    private GitFileService gitFileService;
+
     // Single constructor injecting both dependencies
     public GitPortalController(
             GitBranchService gitBranchService,
             GitRepositoryService gitRepositoryService,
-            GitTreeService gitTreeService) {
+            GitTreeService gitTreeService, GitFileService gitFileService) {
         this.gitBranchService = gitBranchService;
         this.gitRepositoryService = gitRepositoryService;
         this.gitTreeService = gitTreeService;
+        this.gitFileService= gitFileService;
     }
 
     // 1. Connect & Verify Git Token
@@ -143,6 +149,19 @@ public class GitPortalController {
     public ResponseEntity<Object> getRepositoryTree(@RequestBody FetchTreeRequest request) {
         Object treeData = gitTreeService.fetchRepositoryTree(request);
         return ResponseEntity.ok(treeData);
+    }
+
+
+    @PostMapping("/repository/file")
+    public ResponseEntity<Map<String, Object>> readFile(@RequestBody FileRequest request) {
+        Map<String, Object> fileData = gitFileService.readFile(request);
+        return ResponseEntity.ok(fileData);
+    }
+
+    @PutMapping("/repository/file/commit")
+    public ResponseEntity<Map<String, Object>> commitFile(@RequestBody FileRequest request) {
+        Map<String, Object> commitResult = gitFileService.commitFile(request);
+        return ResponseEntity.ok(commitResult);
     }
 
 }
