@@ -87,7 +87,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/v1/seo/**").hasAnyAuthority("ROLE_SEO","ROLE_SEOMANAGER","ROLE_SEOLEADS", "ROLE_ADMIN","ROLE_HR")
                         .requestMatchers("/api/v1/sales/**").hasAnyAuthority("ROLE_SALESMANGER","ROLE_SALESLEAD", "ROLE_ADMIN","ROLE_HR")
-                        .requestMatchers("/api/v1/users/**").hasAnyAuthority("ROLE_WEBMANAGER","ROLE_WEBLEADS","ROLE_HR","ROLE_TEMALEADS","ROLE_USERS", "ROLE_ENGINEER","ROLE_DEVELOPER","ROLE_ADMIN")
+                        .requestMatchers("/api/v1/users/**").hasAnyAuthority("ROLE_HR","ROLE_USERS", "ROLE_ENGINEER","ROLE_DEVELOPER","ROLE_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
